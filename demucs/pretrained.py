@@ -14,6 +14,7 @@ from dora.log import fatal, bold
 
 from .hdemucs import HDemucs
 from .repo import RemoteRepo, LocalRepo, ModelOnlyRepo, BagOnlyRepo, AnyModelRepo, ModelLoadingError  # noqa
+from .states import _check_diffq
 
 logger = logging.getLogger(__name__)
 ROOT_URL = "https://dl.fbaipublicfiles.com/demucs/"
@@ -31,8 +32,8 @@ def demucs_unittest():
 def add_model_flags(parser):
     group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument("-s", "--sig", help="Locally trained XP signature.")
-    group.add_argument("-n", "--name", default=None,
-                       help="Pretrained model name or signature. Default is mdx_extra_q.")
+    group.add_argument("-n", "--name", default="htdemucs",
+                       help="Pretrained model name or signature. Default is htdemucs.")
     parser.add_argument("--repo", type=Path,
                         help="Folder containing all pre-trained models for use with -n.")
 
@@ -43,6 +44,8 @@ def _parse_remote_files(remote_file_list) -> tp.Dict[str, str]:
     for line in remote_file_list.read_text().split('\n'):
         line = line.strip()
         if line.startswith('#'):
+            continue
+        elif len(line) == 0:
             continue
         elif line.startswith('root:'):
             root = line.split(':', 1)[1].strip()
@@ -71,7 +74,13 @@ def get_model(name: str,
         model_repo = LocalRepo(repo)
         bag_repo = BagOnlyRepo(repo, model_repo)
     any_repo = AnyModelRepo(model_repo, bag_repo)
-    model = any_repo.get_model(name)
+    try:
+        model = any_repo.get_model(name)
+    except ImportError as exc:
+        if 'diffq' in exc.args[0]:
+            _check_diffq()
+        raise
+
     model.eval()
     return model
 
